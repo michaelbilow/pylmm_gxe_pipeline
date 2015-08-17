@@ -6,13 +6,20 @@ git clone https://github.com/michaelbilow/pylmm_zarlab (commit 7bf525c)
 
 pip install numpy scipy pandas matplotlib --user
 
-2) Expand that data (recode_for_multiple)
-- The raw data has only one line for each strain; we need one line for each individual (./expanded)
+1) Preprocess the data into the following form:
+  - Plink study.bed, stud.bim, study.fam
+  - study.pheno
+    - Phenotypes as columns
+    - Also, IID, FID, and sex to match the fam file
+    - Covariates starting with "Cov"
+    - Envirnoment as column named Env
+    - Everything should be coded numerically
+  - put the .pheno, .bim, .bed, .fam in the raw_data folder
 
-3) Run plink (run_plink.py) again on that output
-- Remove any SNP that doesn't appear in at least 20% of the individuals (./filtered_expanded)
 
-4) Quantile normalize the phenotypes within groups and between groups (quantile_normalize.py)
+2) Run plink (run_plink.py) on that output, send to the clean_plink 
+
+3) Quantile normalize the phenotypes within groups and between groups (quantile_normalize.py)
 
 5a) Clean and separate the phenotypes, each into its own file (gcta_prepare.py)
 

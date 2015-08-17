@@ -17,12 +17,11 @@ def identity_kinship(input_fn):
 
 def main(kinship_fn):
     blank_kinship(kinship_fn)
-    # identity_kinship(kinship_fn)
+    identity_kinship(kinship_fn)
     return
 
 if __name__ == "__main__":
     input_kinship_fn = '../hmdp/clean_plink/hmdp.grm.kin'
-
     input_kinship_fn = '../eqtl/clean_plink/HAEC.grm.kin'
     main(input_kinship_fn)
 

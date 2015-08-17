@@ -1,3 +1,5 @@
 eqtl/*
 hmdp/*
 programs/*
+*.pyc
+.DS_Store

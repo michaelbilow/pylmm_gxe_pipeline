@@ -101,70 +101,75 @@ def qnorm_pheno_file(pheno_fn):
             output_f.write(output_str)
 
 
-def make_all_qnormed_phenos(df, exclude_cols, cov_col, start_dict, output_fn):
+def make_all_qnormed_phenos(df, keep_cols, cov_col, start_dict, output_fn, no_qnorm=False):
     cov_values = cov_col if not cov_col else df[cov_col].values
+    exclude_cols = keep_cols + list(cov_col) + [x for x in df.columns if x.startswith('Cov')]
     qnormed_cols = []
-    for col in df.columns:
-        if col not in exclude_cols:
-            # print col, len(cov_values)
-            qnormed_vals = quantile_normalize(df[col].values, cov_values)
-            qnormed_cols.append((col, qnormed_vals))
-    qnormed_dict = OrderedDict(qnormed_cols)
-    output_dict = OrderedDict(start_dict.items() + qnormed_dict.items())
-    output_df = pd.DataFrame(output_dict)
+    if no_qnorm:
+        output_df = df[keep_cols + [x for x in df.columns if x not in exclude_cols]]
+    else:
+        for col in df.columns:
+            if col not in exclude_cols:
+                # print col, len(cov_values)
+                qnormed_vals = quantile_normalize(df[col].values, cov_values)
+                qnormed_cols.append((col, qnormed_vals))
+        qnormed_dict = OrderedDict(qnormed_cols)
+        output_dict = OrderedDict(start_dict.items() + qnormed_dict.items())
+        output_df = pd.DataFrame(output_dict)
     output_df.fillna('NA', inplace=True)
     print output_df.head()
     output_df.to_csv(output_fn, index=False, sep='\t')
-
     return output_df
 
 
-def qnorm_multiple(input_fn, keep_cols, drop_cols=(), cov_col=()):
+def qnorm_multiple(input_fn, keep_cols, cov_col, output_folder):
     assert len(cov_col) == 1
     df = pd.read_csv(input_fn, sep='\t')
-    print df.head()
+    # print df.head()
     start_dict = OrderedDict([(col, df[col]) for col in keep_cols])
-    output_fn = '{}_qnormed_between_group'.format(*os.path.splitext(input_fn))
-    exclude_cols = list(keep_cols) + list(drop_cols) + list(cov_col)
-    make_all_qnormed_phenos(df=df, exclude_cols=exclude_cols, cov_col=(),
-                            start_dict=start_dict, output_fn=output_fn)
+    pheno_file_name = split(input_fn)[1]
+    original_output_fn = join(output_folder,
+                              '{}_original'.format(pheno_file_name))
+    print 'Copying original phenotypes...'
+    make_all_qnormed_phenos(df=df,
+                            keep_cols=keep_cols,
+                            cov_col=cov_col,
+                            start_dict=start_dict,
+                            output_fn=original_output_fn,
+                            no_qnorm=True)
+
+    print 'Quantile Normalizing whole dataset'
+    between_output_fn = join(output_folder,
+                     '{}_qnormed_between_group'.format(pheno_file_name))
+    make_all_qnormed_phenos(df=df, keep_cols=keep_cols, cov_col=(),
+                            start_dict=start_dict, output_fn=between_output_fn)
 
     if cov_col:
-        cov_dict = OrderedDict([(col, df[col]) for col in cov_col])
-        cov_output_dict = OrderedDict(start_dict.items() + cov_dict.items())
-        cov_df = pd.DataFrame(cov_output_dict)
-        cov_fn = '{}.cov'.format(os.path.splitext(input_fn)[0])
-        cov_df.to_csv(cov_fn, index=False, sep='\t')
-        cov_output_fn = '{}_qnormed_within_group'.format(input_fn)
-        make_all_qnormed_phenos(df=df, exclude_cols=exclude_cols,
+        print 'Quantile Normalizing within groups'
+        within_output_fn = join(output_folder,
+                             '{}_qnormed_within_group'.format(pheno_file_name))
+        make_all_qnormed_phenos(df=df, keep_cols=keep_cols,
                                 cov_col=cov_col,
                                 start_dict=start_dict,
-                                output_fn=cov_output_fn)
+                                output_fn=within_output_fn)
 
     return
 
+def main(input_folder, study_name, plink_folder, output_pheno_folder):
+    input_fn = join(input_folder, '{}.pheno'.format(study_name))
+    keep_cols = ['FID', 'IID']
+    cov_col = ['Env']
+    input_df = pd.read_csv(input_fn, sep='\t')
+    all_cov_cols = keep_cols + [x for x in input_df.columns if x.startswith('Cov')] + cov_col
+    cov_df = input_df[all_cov_cols]
+    cov_df.to_csv(join(plink_folder, '{}.cov'.format(study_name)),
+                  index=False, sep='\t', header=False)
+    gxe_df = input_df[keep_cols + cov_col]
+    gxe_output_fn = join(plink_folder, '{}.gxe'.format(study_name))
+    gxe_df.to_csv(join(plink_folder, gxe_output_fn),
+                  index=False, sep='\t', header=False)
 
-def haec_preprocess(pheno_fn, cov_fn, bad_rows_fn, fam_fn, output_pheno_fn):
-    df = pd.read_csv(pheno_fn, sep='\t', header=None)
-    print df.head()
-    print df.values.shape
-    bad_rows = set([int(x) - 1 for x in open(bad_rows_fn, 'r')])
-    cleaned_df = df.iloc[[i for i in range(len(df)) if i not in bad_rows]]
-    # print bad_rows
-    print cleaned_df.head()
-    print cleaned_df.values.shape, len(bad_rows)
-    output_df = cleaned_df.T
-    output_df.columns = ['E_{:05}'.format(int(x) + 1) for x in output_df.columns]
-
-    fam_df = pd.read_csv(fam_fn, sep=' ', header=None)
-    fam_df.columns = ['FID', 'IID', 'FatherID', 'MotherID', 'Sex', 'Pheno']
-    fam_df = fam_df[['FID', 'IID', 'Sex']]
-    print fam_df.values.shape
-    output_df = pd.merge(output_df, fam_df, left_index=True, right_index=True)
-
-    output_df['Env'] = [int(x) for x in open(cov_fn, 'r')]
-    output_df.to_csv(output_pheno_fn, sep='\t', index=False)
-    print output_df.head()
+    qnorm_multiple(input_fn, keep_cols=keep_cols, cov_col=cov_col, output_folder=output_pheno_folder)
     return
 
 
@@ -188,15 +193,17 @@ if __name__ == "__main__":
     # covariates = ["covariate_thioglycolate_treated"]
     # qnorm_multiple(input_fn, keep_these, drop_these, covariates)
 
-    eqtl_folder = '../eqtl/raw_pheno'
-    input_fn = join(eqtl_folder, 'expr.merged.R.txt')
-    exclude_rows = join(eqtl_folder, 'normal_test_0_05_sd_test_bad_expr.index.txt')
-    covariate_fn = join(eqtl_folder, 'env_0_1.txt')
-    output_fn = join(eqtl_folder, 'HAEC.pheno')
+    # eqtl_folder = '../eqtl/raw_pheno'
+    # input_fn = join(eqtl_folder, 'expr.merged.R.txt')
+    # exclude_rows = join(eqtl_folder, 'normal_test_0_05_sd_test_bad_expr.index.txt')
+    # covariate_fn = join(eqtl_folder, 'env_0_1.txt')
+    # output_fn = join(eqtl_folder, 'HAEC.pheno')
+    #
+    # plink_folder = '../eqtl/raw_plink'
+    #
+    # haec_preprocess(input_fn, covariate_fn, exclude_rows,
+    #                 fam_fn=join(plink_folder, 'HAEC.fam'), output_pheno_fn=output_fn)
+    #
+    # qnorm_multiple(output_fn, keep_cols=['FID', 'IID'], drop_cols=['Sex'], cov_col=['Env'])
 
-    plink_folder = '../eqtl/raw_plink'
-
-    haec_preprocess(input_fn, covariate_fn, exclude_rows,
-                    fam_fn=join(plink_folder, 'HAEC.fam'), output_pheno_fn=output_fn)
-
-    qnorm_multiple(output_fn, keep_cols=['FID', 'IID'], drop_cols=['Sex'], cov_col=['Env'])
+    main('../eqtl/raw_data', 'HAEC', '../eqtl/clean_plink/', '../eqtl/clean_pheno')

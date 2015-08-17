@@ -24,7 +24,7 @@ def create_output_sample_list(sample_list, iids):
     return output_sample_list
 
 
-def recode_for_multiple_indivs(plink_fn, pheno_fn, output_plink_fn):
+def main(plink_fn, pheno_fn, output_plink_fn):
     plink_file = plinkfile.open(plink_fn)
     if not plink_file.one_locus_per_row():
         print("This script requires that snps are rows and samples columns.")
@@ -71,5 +71,5 @@ if __name__ == "__main__":
     plink_folder = '../raw_plink'
     pheno_folder = '../raw_pheno'
     output_fn = '../expanded/hmdp'
-    recode_for_multiple_indivs(plink_folder + '/hmdp', pheno_folder + '/hmdp.pheno', output_fn)
+    main(plink_folder + '/hmdp', pheno_folder + '/hmdp.pheno', output_fn)
     check_plinkfile(output_fn)

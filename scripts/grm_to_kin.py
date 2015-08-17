@@ -51,8 +51,8 @@ def populate_gxe_kinship(kinship, gxe_fn):
     return gxe_kinship
 
 
-def main(input_folder_name, study_name):
-    input_grm_gz = os.path.join(input_folder_name, '{}.grm.gz'.format(study_name))
+def main(input_folder, study_name):
+    input_grm_gz = os.path.join(input_folder, '{}.grm.gz'.format(study_name))
     read_gzipped_grm(input_grm_gz)
     input_grm_fn = os.path.join(input_folder, '{}.grm'.format(study_name))
     study_size = get_n_indivs(input_grm_fn)
