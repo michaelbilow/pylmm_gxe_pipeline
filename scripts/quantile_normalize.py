@@ -101,18 +101,22 @@ def qnorm_pheno_file(pheno_fn):
             output_f.write(output_str)
 
 
-def make_all_qnormed_phenos(df, keep_cols, cov_col, start_dict, output_fn, no_qnorm=False):
+def make_all_qnormed_phenos(df, keep_cols, cov_col, start_dict, output_fn, no_qnorm=False, max_phenos=None):
     cov_values = cov_col if not cov_col else df[cov_col].values
     exclude_cols = keep_cols + list(cov_col) + [x for x in df.columns if x.startswith('Cov')]
     qnormed_cols = []
+    count = 0
     if no_qnorm:
-        output_df = df[keep_cols + [x for x in df.columns if x not in exclude_cols]]
+        output_df = df[keep_cols + [x for x in df.columns if x not in exclude_cols][:max_phenos]]
     else:
         for col in df.columns:
-            if col not in exclude_cols:
-                # print col, len(cov_values)
-                qnormed_vals = quantile_normalize(df[col].values, cov_values)
-                qnormed_cols.append((col, qnormed_vals))
+            if col in exclude_cols:
+                continue
+            count += 1
+            if max_phenos and count > max_phenos:
+                break
+            qnormed_vals = quantile_normalize(df[col].values, cov_values)
+            qnormed_cols.append((col, qnormed_vals))
         qnormed_dict = OrderedDict(qnormed_cols)
         output_dict = OrderedDict(start_dict.items() + qnormed_dict.items())
         output_df = pd.DataFrame(output_dict)
@@ -122,7 +126,7 @@ def make_all_qnormed_phenos(df, keep_cols, cov_col, start_dict, output_fn, no_qn
     return output_df
 
 
-def qnorm_multiple(input_fn, keep_cols, cov_col, output_folder):
+def qnorm_multiple(input_fn, keep_cols, cov_col, output_folder, max_phenos):
     assert len(cov_col) == 1
     df = pd.read_csv(input_fn, sep='\t')
     # print df.head()
@@ -136,13 +140,15 @@ def qnorm_multiple(input_fn, keep_cols, cov_col, output_folder):
                             cov_col=cov_col,
                             start_dict=start_dict,
                             output_fn=original_output_fn,
-                            no_qnorm=True)
+                            no_qnorm=True,
+                            max_phenos=max_phenos)
 
     print 'Quantile Normalizing whole dataset'
     between_output_fn = join(output_folder,
                      '{}_qnormed_between_group'.format(pheno_file_name))
     make_all_qnormed_phenos(df=df, keep_cols=keep_cols, cov_col=(),
-                            start_dict=start_dict, output_fn=between_output_fn)
+                            start_dict=start_dict, output_fn=between_output_fn,
+                            max_phenos=max_phenos)
 
     if cov_col:
         print 'Quantile Normalizing within groups'
@@ -151,25 +157,29 @@ def qnorm_multiple(input_fn, keep_cols, cov_col, output_folder):
         make_all_qnormed_phenos(df=df, keep_cols=keep_cols,
                                 cov_col=cov_col,
                                 start_dict=start_dict,
-                                output_fn=within_output_fn)
+                                output_fn=within_output_fn,
+                                max_phenos=max_phenos)
 
     return
 
-def main(input_folder, study_name, plink_folder, output_pheno_folder):
+
+def main(input_folder, study_name, plink_folder, output_pheno_folder, max_phenos=None):
     input_fn = join(input_folder, '{}.pheno'.format(study_name))
     keep_cols = ['FID', 'IID']
-    cov_col = ['Env']
+    env_col = ['Env']
     input_df = pd.read_csv(input_fn, sep='\t')
-    all_cov_cols = keep_cols + [x for x in input_df.columns if x.startswith('Cov')] + cov_col
+    all_cov_cols = keep_cols + [x for x in input_df.columns if x.startswith('Cov')] + env_col
     cov_df = input_df[all_cov_cols]
-    cov_df.to_csv(join(plink_folder, '{}.cov'.format(study_name)),
+    cov_output_fn = join(plink_folder, '{}.cov'.format(study_name))
+    cov_df.to_csv(cov_output_fn,
                   index=False, sep='\t', header=False)
-    gxe_df = input_df[keep_cols + cov_col]
+    gxe_df = input_df[keep_cols + env_col]
     gxe_output_fn = join(plink_folder, '{}.gxe'.format(study_name))
-    gxe_df.to_csv(join(plink_folder, gxe_output_fn),
+    gxe_df.to_csv(gxe_output_fn,
                   index=False, sep='\t', header=False)
 
-    qnorm_multiple(input_fn, keep_cols=keep_cols, cov_col=cov_col, output_folder=output_pheno_folder)
+    qnorm_multiple(input_fn, keep_cols=keep_cols, cov_col=env_col, output_folder=output_pheno_folder,
+                   max_phenos=max_phenos)
     return
 
 
@@ -206,4 +216,4 @@ if __name__ == "__main__":
     #
     # qnorm_multiple(output_fn, keep_cols=['FID', 'IID'], drop_cols=['Sex'], cov_col=['Env'])
 
-    main('../eqtl/raw_data', 'HAEC', '../eqtl/clean_plink/', '../eqtl/clean_pheno')
+    main('../eqtl/raw_data', 'HAEC', '../eqtl/clean_plink/', '../eqtl/clean_pheno', max_phenos=10)

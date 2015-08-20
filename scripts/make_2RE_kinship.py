@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from scipy import linalg
 from os.path import join, splitext, split, exists
 from os import listdir, makedirs, remove
 

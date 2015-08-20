@@ -16,17 +16,18 @@ def pylmm_run_wrapper(kwargs):
     return pylmm_run(**kwargs)
 
 
-def pylmm_run(plinkfile, phenofile, gxe, kfile, noCorrect, covfile, test_type, output_folder):
+def pylmm_run(plinkfile, phenofile, gxe, kfile, noCorrect, covfile, test_type, output_folder, study_name, limit=True):
     # print locals()
     pylmm_command = 'python {script_loc} -v --bfile {plink} ' \
                     '--kfile {kinship} --phenofile {pheno} --covfile {covfile} ' \
-                    '--limit {gxe} {test_type} {noCorrect} {outfile}'
+                    '{limit} {gxe} {test_type} {noCorrect} {outfile}'
 
     kfile_name = split(kfile)[1]
     kfile_type = 'K-GxE' if 'gxe' in kfile_name \
         else 'K-Blank' if 'blank' in kfile_name \
         else 'K-2RE' if '2re' in kfile_name \
         else 'K-Id' if 'identity' in kfile_name \
+        else 'K-G' if kfile_name == '{}.grm.kin'.format(study_name) \
         else 'K-Unknown'
     run_type = 'GxE' if gxe else 'G'
     out_fn = '{}/{}_{}.stats_{}'.format(output_folder,
@@ -42,19 +43,22 @@ def pylmm_run(plinkfile, phenofile, gxe, kfile, noCorrect, covfile, test_type, o
                                         noCorrect='--noKCorrection' if noCorrect else '',
                                         outfile=out_fn,
                                         covfile=covfile,
-                                        test_type=test_type)
+                                        test_type=test_type,
+                                        limit='--limit' if limit else '')
     print this_command
     subprocess.call(this_command, shell=True)
     return
 
 
-def main(input_plink_folder, input_pheno_folder, results_folder, two_RE_kfile_folder, study_name):
+def main(input_plink_folder, input_pheno_folder, results_folder, two_RE_kfile_folder, study_name, limit=True):
     if not exists(results_folder):
         makedirs(results_folder)
     pheno_files = [join(input_pheno_folder, x) for x in listdir(input_pheno_folder)]
     input_plinkfile = join(input_plink_folder, study_name)
     input_covfile = join(input_plink_folder, '{}.cov'.format(study_name))
-    kfile_list = [join(input_plink_folder, x)for x in listdir(input_plink_folder) if splitext(x)[1] == '.kin']
+    kfile_list = [join(input_plink_folder, x)for x in listdir(input_plink_folder) if splitext(x)[1] == '.kin'
+                  and '_gxe' not in x]
+    assert len(kfile_list) == 2  # Should have just the identity kinship and the genetic kinship
     kwargs_list = [{'plinkfile': input_plinkfile,
                     'kfile': kfile,
                     'phenofile': fn,
@@ -62,7 +66,8 @@ def main(input_plink_folder, input_pheno_folder, results_folder, two_RE_kfile_fo
                     'noCorrect': True,
                     'output_folder': results_folder,
                     'covfile': input_covfile,
-                    'test_type': "--testOLS" if 'blank' in kfile or 'identity' in kfile else "--testOneRE"}
+                    'test_type': "--testOLS" if 'identity' in kfile else "--testOneRE",
+                    'study_name': study_name}
                    for (kfile, fn) in itertools.product(kfile_list, pheno_files)]
 
     matched_pheno_k_files = [(join(input_pheno_folder, x),
@@ -77,7 +82,8 @@ def main(input_plink_folder, input_pheno_folder, results_folder, two_RE_kfile_fo
                            'noCorrect': True,
                            'output_folder': results_folder,
                            'covfile': input_covfile,
-                           'test_type': ''}
+                           'test_type': '',
+                           'study_name': study_name}
                           for (fn, kfile) in matched_pheno_k_files]
     # pylmm_wrapper(kwargs_list[0])
     # pylmm_wrapper(two_RE_kwargs_list[0])

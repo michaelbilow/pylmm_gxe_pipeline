@@ -6,17 +6,20 @@ import numpy as np
 
 
 def translate_title(title):
-    K_type = title.split('_')[-1]
-    phen = ' '.join(title.split('_')[:-1])
-    if any(u in K_type for u in ('GxE',)):
-        pretty_K_type = K_type
-    elif 'BLANK' in K_type.upper():
-        pretty_K_type = 'OLS'
-    elif '2RE' in K_type.upper():
-        pretty_K_type = 'Two RE'
+    K_type = title.split('_')[-1].split('.')[0]
+    pretty_K_type = '2RE' if K_type == 'K-2RE' \
+        else '1RE' if K_type == 'K-G' \
+        else 'OLS' if K_type == 'K-Id' \
+        else 'K-Unknown'
+    if 'original' in title:
+        phen = title.split('_original_')[0]
+        qnorm = 'Original*Phenotype'
     else:
-        pretty_K_type = 'One RE'
-    return phen, pretty_K_type
+        phen = title.split('_qnormed_')[0]
+        raw_qnorm = ' '.join(title.split('_qnormed_')[1].split('_')[:-1])
+        good_qnorm = ' '.join(x.capitalize() for x in raw_qnorm.split(' '))
+        qnorm = 'Quanitle Normalize*{}'.format(good_qnorm)
+    return phen, qnorm, pretty_K_type
 
 
 def read_input(fn, output_folder, graph=False):
@@ -59,38 +62,58 @@ def read_input(fn, output_folder, graph=False):
     return lambda_val
 
 
-def main(input_folder):
-    plt.rc('text', usetex=True)
-    input_fns = [join(input_folder, x) for x in listdir(input_folder) if 'stats_GxE' in x]
-    print input_fns
+def main(input_folder, reuse=False):
     output_folder = join(split(input_folder)[0], 'pylmm_stats')
-    if not exists(output_folder):
-        makedirs(output_folder)
-    output_records = []
-    for fn in input_fns:
-        output_lambda = read_input(fn, output_folder)
-        title = split(fn)[-1].split('___')[1].split('.')[0]
-        pheno_name, K_name = translate_title(title)
-        output_record = {'lambda': output_lambda,
-                         'QNormed': 'QNormed' if 'qnormed' in fn else 'Not QNormed',
-                         'Phenotype': pheno_name,
-                         'K_type': K_name}
-        output_records.append(output_record)
-    import pandas as pd
-    df = pd.DataFrame(output_records)
-    df.to_csv(join(output_folder, 'pylmm_inflation_raw.csv'))
-    df.set_index(['Phenotype', 'QNormed', 'K_type'], inplace=True)
-    df = df.unstack((-1, -2))
-    df.to_csv(join(output_folder, 'pylmm_inflation.csv'))
-    plt.figure()
-    df.columns = ['\n'.join(x) for x in df.columns]
-    df.boxplot()
-    plt.savefig(join(output_folder, 'boxplot.png'))
+
+    if not reuse:
+        input_fns = [join(input_folder, x) for x in listdir(input_folder) if 'stats_GxE' in x]
+        print input_fns
+        if not exists(output_folder):
+            makedirs(output_folder)
+        output_records = []
+        for fn in input_fns:
+            output_lambda = read_input(fn, output_folder)
+            title = split(fn)[-1].split('___')[1].split('.')[0]
+            pheno_name, qnorm, K_name = translate_title(title)
+            output_record = {'lambda': output_lambda,
+                             'QNormed': qnorm,
+                             'Phenotype': pheno_name,
+                             'K_type': K_name}
+            if 'Unknown' in K_name:
+                continue
+            output_records.append(output_record)
+        df = pd.DataFrame(output_records)
+        df.to_csv(join(output_folder, 'pylmm_inflation_raw.csv'), index=True)
+        df.set_index(['Phenotype', 'QNormed', 'K_type'], inplace=True)
+        df = df.unstack((-2, -1))
+        # df.sortlevel(level=2, axis=1, inplace=True)
+        col_tuples = [x[1:] for x in df.columns]
+        df.columns = pd.MultiIndex.from_tuples(col_tuples)
+        df.to_csv(join(output_folder, 'pylmm_inflation.csv'), index=True)
+    else:
+        df = pd.read_csv(join(output_folder, 'pylmm_inflation.csv'), header=[0, 1],
+                         skipinitialspace=True, tupleize_cols=True)
+        df.columns = pd.MultiIndex.from_tuples(df.columns)
+
+
+    plt.rc('text', usetex=True)
+    df.columns = ['\n'.join(x).replace('*', '\n') for x in df.columns]
+    for i in range(3):
+        plt.figure(figsize=(10, 10))
+        tiny_df = df[df.columns[3*i: 3*i+3]]
+        print tiny_df.columns
+        correct_col_order = sorted(tiny_df.columns, key=lambda col: 0 if col.endswith('OLS')
+                                                        else 1 if col.endswith('1RE') else 2)
+        tiny_df = tiny_df[correct_col_order]
+        norm_type = ' '.join(tiny_df.columns[0].split('\n')[:2])
+        tiny_df.boxplot()
+        plt.title('Distribution of Inflation Factors for HAEC eQTL Studies ({})'.format(norm_type))
+        plt.savefig(join(output_folder, 'boxplot_{}.png'.format(''.join((x[0] for x in norm_type.split())))))
     return
 
 
 if __name__ == "__main__":
-    input_folder = '../eqtl/pylmm_output'
-    main(input_folder)
+    input_folder = '../eqtl/pylmm_output (2)'
+    main(input_folder, reuse=False)
 
 

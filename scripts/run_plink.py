@@ -4,8 +4,9 @@ import sys
 
 MAF = .1
 GENO = .02
-MAC_PLINK_LOC = 'plink1.07_mac'
-LINUX_PLINK_LOC = 'plink1.07linux'
+
+MAC_PLINK_LOC = '../programs/plink1.07_mac'
+LINUX_PLINK_LOC = '../programs/plink1.07linux'
 
 
 def plink_run(input_fn, output_fn, maf=MAF, geno=GENO):
